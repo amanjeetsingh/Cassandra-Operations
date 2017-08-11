@@ -1,0 +1,85 @@
+#!/usr/bin/env ansible-playbook
+
+# Use this playbook to update parameters in cassandra.yaml file on remote hosts.
+
+- name: Update configuration on remote nodes 
+  hosts: localhost
+
+# Change these variables as per your requirements 
+  vars:
+    - cassandra_dir: /opt/cassandra/apache-cassandra-3.0.11
+    - config_file: cassandra.yaml
+    - cassandra_user: cassandra 
+    - cassandra_group: cassandra
+
+# Dictionary that contains list of parameters that we want to update on remote nodes. 
+# Defining a dictionary allows this play to update multiple parameters in a loop and then restart Cassandra service once. 
+  vars_files:
+    - parameters_list.yml 
+
+  tasks:
+ 
+ # List of parameters that you can't either modify directly and/or require more than just Cassandra service restart.   
+    - set_fact:
+        restricted_params: ['cluster_name','num_tokens','listen_address','listen_interface','seed_provider','seeds','broadcast_address','rpc_address']
+       
+    - set_fact: time_stamp="{{lookup('pipe','date +%d%m%y%H%M%S')}}"
+ 
+ # Commands to rollback files in case there's an issue.    
+    - set_fact:
+        rollback_command:
+          - 'mv {{cassandra_dir}}/conf/{{config_file}} {{cassandra_dir}}/conf/{{config_file}}.old_invalid.{{time_stamp}}'
+          - 'mv {{cassandra_dir}}/conf/{{config_file}}.{{time_stamp}}.bak {{cassandra_dir}}/conf/{{config_file}}'
+
+    - name: Commence block 
+      block:
+        - name: Backup existing config file on remote nodes
+          copy:
+            src: "{{cassandra_dir}}/conf/{{config_file}}" 
+            dest: "{{cassandra_dir}}/conf/{{config_file}}.{{time_stamp}}.bak"
+            remote_src: True
+            mode: 0644
+            owner: "{{cassandra_user}}"
+            group: "{{cassandra_group}}"
+          become: True
+      
+      # This task updates values for the parameters that are already enabled. 
+        - lineinfile:
+            path: "{{cassandra_dir}}/conf/{{config_file}}"
+            state: present
+            regexp: '^{{ item.value.parameter_name }}'
+            line: '{{ item.value.parameter_name }}: {{ item.value.parameter_value }}'
+          with_dict: "{{ parameter_list }}"
+          when: (item.value.parameter_name not in restricted_params) and not (item.value.parameter_name | search("#"))
+          become: True
+      
+      # This task updates value for a given parameter that was previously commented out #. 
+      # This task will un-comment the parameter thereby enabling it. 
+        - lineinfile:
+            path: "{{cassandra_dir}}/conf/{{config_file}}"
+            state: present
+            regexp: '^{{ item.value.parameter_name }}'
+            line: "{{ item.value.parameter_name | regex_replace(' ','') | regex_replace('#','')}}: {{ item.value.parameter_value }}"
+          with_dict: "{{ parameter_list }}"
+          when: (item.value.parameter_name not in restricted_params) and (item.value.parameter_name | search("#"))
+          become: True
+
+        - name: Ensuring cassandra configuration is protected
+          file:
+            path: "{{cassandra_dir}}/conf/{{config_file}}"
+            state: file
+            mode: 0600
+            owner: "{{cassandra_user}}"
+            group: "{{cassandra_group}}"
+          become: True  
+        
+      rescue:
+        - name: Rollback in case there's a failure.
+          command: '{{rollback_command}}'
+          args:
+            executable: /bin/bash
+          become: True
+
+    - name: Restart Cassandra service 
+      shell: 'sudo systemctl restart cassandra'
+      become: Yes

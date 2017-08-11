@@ -1,0 +1,28 @@
+---
+
+# Parameters list 
+
+# To enable the parameters that are commented out in cassandra.yaml file, please use the following format to enable them. 
+#  parameter1:
+#    parameter_name: "#concurrent_compactors"
+#    parameter_value: 2
+
+# To update value of a parameter that is already enabled, please use the following format.
+#  parameter2:
+#    parameter_name: max_hints_delivery_threads
+#    parameter_value: 2
+
+
+parameter_list:
+
+  parameter1:
+    parameter_name: hinted_handoff_enabled
+    parameter_value: True
+
+  parameter2:
+    parameter_name: max_hints_delivery_threads
+    parameter_value: 2999999999
+
+  parameter3:
+    parameter_name: max_hint_window_in_ms
+    parameter_value: 1
