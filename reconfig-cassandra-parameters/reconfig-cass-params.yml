@@ -89,6 +89,9 @@
           become: True
 
   handlers:
+
+# This section of the playbook will only run if changes are made to cassandra.yml file. 
+    
 # This part of the playbook is used for identifying if Cassandra is running as a service or a standalone process. Depending upon the outcome of various checks, playbook will either issue a restart service 
 # command or simply kill and then start cassandra 
 
