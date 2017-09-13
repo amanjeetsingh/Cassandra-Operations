@@ -13,19 +13,11 @@
 #    parameter_value: 2
 
 parameter_list:
-
-#  parameter1:
-#    parameter_name: hinted_handoff_enabled
-#    parameter_value: True
-
-#  parameter2:
-#    parameter_name: max_hints_delivery_threads
-#    parameter_value: 2999
  
-  parameter3:
+  parameter1:
     parameter_name: authorizer
-    parameter_value: CassandraAuthorizer
+    parameter_value: AllowAllAuthorizer
 
-#  parameter4:
-#    parameter_name: authenticator
-#    parameter_value: PasswordAuthenticator
+  parameter2:
+    parameter_name: authenticator
+    parameter_value: AllowAllAuthenticator

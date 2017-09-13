@@ -58,6 +58,7 @@
           with_dict: "{{ parameter_list }}"
           when: (item.value.parameter_name not in restricted_params) and not (item.value.parameter_name | search("#"))
           become: True
+          notify: restart-services
       
       # This task updates value for a given parameter that was previously commented out #. 
       # This task will un-comment the parameter thereby enabling it. 
@@ -69,6 +70,7 @@
           with_dict: "{{ parameter_list }}"
           when: (item.value.parameter_name not in restricted_params) and (item.value.parameter_name | search("#"))
           become: True
+          notify: restart-services
 
         - name: Ensuring cassandra configuration is protected
           file:
@@ -78,7 +80,7 @@
             owner: "{{cassandra_user}}"
             group: "{{cassandra_group}}"
           become: True  
-        
+          
       rescue:
         - name: Rollback in case there's a failure.
           command: '{{rollback_command}}'
@@ -86,43 +88,52 @@
             executable: /bin/bash
           become: True
 
-
+  handlers:
 # This part of the playbook is used for identifying if Cassandra is running as a service or a standalone process. Depending upon the outcome of various checks, playbook will either issue a restart service 
 # command or simply kill and then start cassandra 
 
     # Command for checking in case Cassandra process is running or not.
     - set_fact: check_pid="ps -ef | grep cassandra | grep "org.apache.cassandra.service.CassandraDaemon" | grep -v grep"
+      listen: restart-services
      
     # Check if the Cassandra process exists or not? Capture return code. 
     - name: Check if Cassandra process is running or not
       shell: "{{check_pid}}"
       register: check_pid_rc
       ignore_errors: Yes
+      listen: restart-services
     
     # Capture return code
     - set_fact: check_pid_rc_returncode={{check_pid_rc.rc}}
+      listen: restart-services
 
     - debug: msg={{check_pid_rc_returncode}}
+
 
     # Check if Cassandra is running as a service and capture return code. 
     - name: Check if cassandra is configured to run as a service
       command: systemctl status cassandra
       register: svc_cassandra
       ignore_errors: Yes
+      listen: restart-services
 
     - set_fact: svc_cassandra_return_code={{svc_cassandra.rc}}
+      listen: restart-services
     
     # Use this task to restart Cassandra if it's running as a service. This will run if Cassandra process exists and service status check returns error code 0. If the conditions are false, then this 
     # task will be skipped. 
     - set_fact: restart_cassandra_service="{{cassandra_dir}}/bin/nodetool flush && systemctl status cassandra"
+      listen: restart-services
 
     - name: Use this to restart Cassandra if it's running as a process 
       command: "{{restart_cassandra_service}}"
       when: check_pid_rc_returncode == "0" and svc_cassandra_return_code == "0"
       become: True
+      listen: restart-services
 
     # Use this task to restart Cassandra if it is running as a standalone process.
     - set_fact: restart_cass_standalone_process="{{cassandra_dir}}/bin/nodetool flush && ps -ef | grep cassandra | grep "org.apache.cassandra.service.CassandraDaemon" | grep -v grep | awk {'print $2'} | xargs kill && sleep 30 && {{cassandra_dir}}/bin/cassandra > /dev/null 2>&1 &"
+      listen: restart-services
 
     - name: Use this to restart Cassandra if it's running as a standalone process 
       shell: "{{restart_cass_standalone_process}}" 
@@ -130,3 +141,4 @@
       poll: 60
       when: check_pid_rc_returncode == "0" and svc_cassandra_return_code != "0"
       become: True
+      listen: restart-services
